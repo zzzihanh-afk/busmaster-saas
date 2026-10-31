@@ -44,8 +44,12 @@ export function getDatabaseConfig(): DatabaseConfig {
     // fallback to env
   }
 
-  const envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  const DEFAULT_SUPABASE_URL = 'https://iwwstaomkwqkcwxgkkhk.supabase.co';
+  const DEFAULT_SUPABASE_ANON_KEY =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3d3N0YW9ta3dxa2N3eGdra2hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MzAxMTcsImV4cCI6MjEwOTAwNjExN30.fjr117mO2qt7QXIiBGEPZnqNM1PybfCmYQHgogeNlQg';
+
+  const envUrl = (import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
   const isValidEnv =
     Boolean(envUrl) &&
     Boolean(envKey) &&
