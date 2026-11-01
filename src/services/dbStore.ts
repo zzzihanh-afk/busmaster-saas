@@ -1412,6 +1412,12 @@ class SaaSDataStore {
     this.notify();
   }
 
+  public deleteCounter(id: string): void {
+    this.counters = this.counters.filter((c) => c.id !== id);
+    saveToStorage('counters', this.counters);
+    this.notify();
+  }
+
   // ------------------ Cash Sessions ------------------
   public getCashSessions(tenantId?: string): CashSession[] {
     if (tenantId) return this.cashSessions.filter((c) => c.tenant_id === tenantId);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { dbStore } from '../../services/dbStore';
-import { Route, RouteStop } from '../../types';
+import { Route, RouteStop, Counter } from '../../types';
 import {
   Bus as BusIcon,
   Route as RouteIcon,
@@ -30,6 +30,7 @@ import {
   Sparkles,
   Navigation,
   AlertCircle,
+  Store,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -514,6 +515,149 @@ export const CompanyOwnerPortal: React.FC = () => {
   const handleDeleteRoute = (rtId: string, rtName: string) => {
     if (window.confirm(`Are you sure you want to delete route "${rtName}"?`)) {
       dbStore.deleteRoute(rtId);
+    }
+  };
+
+  // Counter Management State & Handlers
+  const [showCounterModal, setShowCounterModal] = useState(false);
+  const [editingCounterId, setEditingCounterId] = useState<string | null>(null);
+  const [newCounter, setNewCounter] = useState({
+    name: '',
+    code: '',
+    city: 'Dhaka',
+    address: '',
+    contact_phone: '+880 1819-',
+    manager_id: '',
+    status: 'active' as 'active' | 'inactive' | 'maintenance',
+  });
+
+  const POPULAR_COUNTER_PRESETS = [
+    {
+      name: 'Arambagh Central Counter (Dhaka)',
+      codeSuffix: 'ARM-01',
+      city: 'Dhaka',
+      address: 'Shop 4-5, Arambagh Bus Stand, Motijheel, Dhaka',
+      phone: '+880 1819-456789',
+    },
+    {
+      name: 'Gabtoli Main Terminal Counter (Dhaka)',
+      codeSuffix: 'GBT-01',
+      city: 'Dhaka',
+      address: 'Platform 12, Gabtoli Inter-District Bus Terminal, Mirpur, Dhaka',
+      phone: '+880 1819-654321',
+    },
+    {
+      name: 'Sayedabad Highway Counter (Dhaka)',
+      codeSuffix: 'SYD-01',
+      city: 'Dhaka',
+      address: 'Sayedabad Bus Terminal North Gate, Jatrabari, Dhaka',
+      phone: '+880 1819-789012',
+    },
+    {
+      name: 'Dampara Central Hub (Chattogram)',
+      codeSuffix: 'DMP-01',
+      city: 'Chattogram',
+      address: 'Dampara Bus Stand, CDA Avenue, Chattogram',
+      phone: '+880 1819-890123',
+    },
+    {
+      name: 'Kolatoli Beach Point (Cox\'s Bazar)',
+      codeSuffix: 'KLT-01',
+      city: 'Cox\'s Bazar',
+      address: 'Hotel Motel Zone, Kolatoli Road, Cox\'s Bazar',
+      phone: '+880 1819-901234',
+    },
+    {
+      name: 'Kadamtoli Main Station (Sylhet)',
+      codeSuffix: 'KDM-01',
+      city: 'Sylhet',
+      address: 'Kadamtoli Bus Terminal Road, South Surma, Sylhet',
+      phone: '+880 1819-234567',
+    },
+    {
+      name: 'Kamarpara Central Counter (Rangpur)',
+      codeSuffix: 'KMP-01',
+      city: 'Rangpur',
+      address: 'Kamarpara Bus Stand, Station Road, Rangpur',
+      phone: '+880 1819-345678',
+    },
+    {
+      name: 'Shiroil Bus Terminal Counter (Rajshahi)',
+      codeSuffix: 'SHR-01',
+      city: 'Rajshahi',
+      address: 'Shiroil Railway Station Road, Rajshahi',
+      phone: '+880 1819-456123',
+    },
+  ];
+
+  const handleOpenAddCounter = () => {
+    setEditingCounterId(null);
+    const prefix = (tenant?.slug || 'CNT').toUpperCase().substring(0, 3);
+    const randomCode = `${prefix}-${Math.floor(10 + Math.random() * 90)}`;
+    setNewCounter({
+      name: '',
+      code: randomCode,
+      city: 'Dhaka',
+      address: '',
+      contact_phone: '+880 1819-',
+      manager_id: '',
+      status: 'active',
+    });
+    setShowCounterModal(true);
+  };
+
+  const handleOpenEditCounter = (cnt: Counter) => {
+    setEditingCounterId(cnt.id);
+    setNewCounter({
+      name: cnt.name,
+      code: cnt.code,
+      city: cnt.city,
+      address: cnt.address,
+      contact_phone: cnt.contact_phone,
+      manager_id: cnt.manager_id || '',
+      status: cnt.status,
+    });
+    setShowCounterModal(true);
+  };
+
+  const handleApplyCounterPreset = (preset: (typeof POPULAR_COUNTER_PRESETS)[0]) => {
+    const prefix = (tenant?.slug || 'CNT').toUpperCase().substring(0, 3);
+    setNewCounter({
+      ...newCounter,
+      name: preset.name,
+      code: `${prefix}-${preset.codeSuffix}`,
+      city: preset.city,
+      address: preset.address,
+      contact_phone: preset.phone,
+    });
+  };
+
+  const handleSaveCounter = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCounter.name.trim() || !newCounter.code.trim()) {
+      alert('Please provide a counter name and code.');
+      return;
+    }
+    const counterToSave: Counter = {
+      id: editingCounterId || `cnt-${Date.now()}`,
+      tenant_id: tenantId,
+      name: newCounter.name.trim(),
+      code: newCounter.code.trim().toUpperCase(),
+      city: newCounter.city.trim(),
+      address: newCounter.address.trim(),
+      contact_phone: newCounter.contact_phone.trim(),
+      manager_id: newCounter.manager_id || undefined,
+      status: newCounter.status,
+      created_at: new Date().toISOString(),
+    };
+    dbStore.saveCounter(counterToSave);
+    setShowCounterModal(false);
+    setEditingCounterId(null);
+  };
+
+  const handleDeleteCounter = (cntId: string, cntName: string) => {
+    if (window.confirm(`Are you sure you want to delete station counter "${cntName}"?`)) {
+      dbStore.deleteCounter(cntId);
     }
   };
 
@@ -1732,31 +1876,300 @@ export const CompanyOwnerPortal: React.FC = () => {
       {/* TAB 7: COUNTERS */}
       {activeTab === 'counters' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              Physical Ticket Stations & Counters ({counters.length})
-            </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Physical Ticket Stations & Counters ({counters.length})</span>
+                <span className="text-xs font-normal text-slate-500">
+                  (POS Booking Outlets & Terminal Booths)
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Manage physical bus terminal booths, cash drawer tills, contact phones, and counter dispatch staff.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenAddCounter}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-md transition cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Station Counter</span>
+            </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {counters.map((cnt) => (
-              <div
-                key={cnt.id}
-                className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-2 text-xs"
+
+          {/* Quick Counter Presets */}
+          <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80 flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 text-[11px]">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              Quick Add Major Terminal Counters:
+            </span>
+            {POPULAR_COUNTER_PRESETS.map((pst) => (
+              <button
+                key={pst.name}
+                type="button"
+                onClick={() => {
+                  handleOpenAddCounter();
+                  handleApplyCounterPreset(pst);
+                }}
+                className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] font-medium transition cursor-pointer shadow-xs"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded font-bold">
-                    {cnt.code}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                    {cnt.status.toUpperCase()}
-                  </span>
-                </div>
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white">{cnt.name}</h3>
-                <p className="text-slate-500">{cnt.address}, {cnt.city}</p>
-                <p className="text-slate-700 dark:text-slate-300 font-mono">{cnt.contact_phone}</p>
-              </div>
+                + {pst.name.split('(')[0].trim()} ({pst.city})
+              </button>
             ))}
           </div>
+
+          {/* Counters Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {counters.length === 0 ? (
+              <div className="col-span-full bg-white dark:bg-slate-800 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-10 text-center space-y-3">
+                <Store className="w-10 h-10 text-slate-400 mx-auto" />
+                <h3 className="font-bold text-slate-700 dark:text-slate-200">No Station Counters Configured</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Click the button below to register your first ticket booking station or counter outlet.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenAddCounter}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Station Counter
+                </button>
+              </div>
+            ) : (
+              counters.map((cnt) => (
+                <div
+                  key={cnt.id}
+                  className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-3 text-xs transition hover:border-slate-300 dark:hover:border-slate-600 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded font-bold border border-blue-200 dark:border-blue-900">
+                        {cnt.code}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          cnt.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : cnt.status === 'maintenance'
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        {cnt.status}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                        {cnt.name}
+                      </h3>
+                      <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 block mt-0.5">
+                        📍 {cnt.city}
+                      </span>
+                    </div>
+
+                    <p className="text-slate-500 dark:text-slate-400 text-xs">
+                      {cnt.address}
+                    </p>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-slate-600 dark:text-slate-300">
+                      <span className="font-mono text-[11px] flex items-center gap-1.5 font-semibold">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        {cnt.contact_phone}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditCounter(cnt)}
+                      className="px-2.5 py-1 text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700/60 rounded text-xs font-semibold flex items-center gap-1 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCounter(cnt.id, cnt.name)}
+                      className="px-2.5 py-1 text-rose-600 hover:text-white hover:bg-rose-600 rounded text-xs font-semibold flex items-center gap-1 border border-rose-200 dark:border-rose-900/60 transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Add / Edit Counter Modal */}
+          {showCounterModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 my-8 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-blue-600" />
+                      <span>{editingCounterId ? 'Edit Station Counter' : 'Add New Station Counter'}</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Register a terminal ticket booth, POS counter outlet, and contact hotline.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCounterModal(false);
+                      setEditingCounterId(null);
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Popular Presets Quick Selector */}
+                {!editingCounterId && (
+                  <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50 space-y-2">
+                    <span className="text-[11px] font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      Quick Preset Locations:
+                    </span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {POPULAR_COUNTER_PRESETS.slice(0, 4).map((pst) => (
+                        <button
+                          key={pst.name}
+                          type="button"
+                          onClick={() => handleApplyCounterPreset(pst)}
+                          className="px-2 py-1.5 bg-white dark:bg-slate-800 hover:border-blue-500 rounded-lg border border-slate-200 dark:border-slate-700 text-left transition cursor-pointer shadow-2xs"
+                        >
+                          <span className="font-bold text-[11px] text-slate-800 dark:text-slate-200 block truncate">
+                            {pst.name.split('(')[0].trim()}
+                          </span>
+                          <span className="text-[9px] text-slate-400 block font-mono">
+                            {pst.city} • {pst.codeSuffix}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveCounter} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Counter Station Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newCounter.name}
+                      onChange={(e) => setNewCounter({ ...newCounter, name: e.target.value })}
+                      placeholder="e.g. Arambagh VIP Counter"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Station Code *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newCounter.code}
+                        onChange={(e) => setNewCounter({ ...newCounter, code: e.target.value.toUpperCase() })}
+                        placeholder="e.g. HN-ARM-01"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        City / Division *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newCounter.city}
+                        onChange={(e) => setNewCounter({ ...newCounter, city: e.target.value })}
+                        placeholder="e.g. Dhaka, Chattogram"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Physical Address / Terminal Location *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newCounter.address}
+                      onChange={(e) => setNewCounter({ ...newCounter, address: e.target.value })}
+                      placeholder="e.g. Platform 4, Inter-District Terminal, Arambagh, Dhaka"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Contact Phone / Hotline *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newCounter.contact_phone}
+                        onChange={(e) => setNewCounter({ ...newCounter, contact_phone: e.target.value })}
+                        placeholder="+880 1819-..."
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Status
+                      </label>
+                      <select
+                        value={newCounter.status}
+                        onChange={(e) => setNewCounter({ ...newCounter, status: e.target.value as 'active' | 'inactive' | 'maintenance' })}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="active">Active (Online POS)</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="inactive">Inactive / Closed</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCounterModal(false);
+                        setEditingCounterId(null);
+                      }}
+                      className="px-4 py-2 font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span>{editingCounterId ? 'Update Counter' : 'Save Counter Station'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
