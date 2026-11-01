@@ -39,18 +39,8 @@ export const DriverPortal: React.FC = () => {
   const routes = dbStore.getRoutes(tenantId);
 
   // Modals state
-  const [showAddDriverModal, setShowAddDriverModal] = useState(false);
   const [showAssignBusModal, setShowAssignBusModal] = useState(false);
   const [showScheduleTripModal, setShowScheduleTripModal] = useState(false);
-
-  // New Driver Form state
-  const [newDriver, setNewDriver] = useState({
-    full_name: '',
-    phone: '',
-    email: '',
-    license_number: '',
-    assigned_bus_id: buses[0]?.id || '',
-  });
 
   // Assign Bus to Driver state
   const [selectedBusForDriver, setSelectedBusForDriver] = useState<string>(buses[0]?.id || '');
@@ -138,66 +128,6 @@ export const DriverPortal: React.FC = () => {
     }));
   };
 
-  // Add Bus Driver handler
-  const handleCreateDriver = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDriver.full_name || !newDriver.phone) return;
-
-    const generatedLicense =
-      newDriver.license_number.trim() ||
-      'BRTA-PROF-DL-' + Math.floor(100000 + Math.random() * 900000);
-
-    const driverProfile: Profile = {
-      id: 'p-drv-' + Date.now(),
-      tenant_id: tenantId,
-      full_name: newDriver.full_name.trim(),
-      phone: newDriver.phone.trim(),
-      email: newDriver.email.trim() || `driver.${Date.now()}@${tenant?.slug || 'operator'}.bd`,
-      role: 'driver',
-      license_number: generatedLicense,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    };
-
-    dbStore.saveProfile(driverProfile);
-
-    // If bus assigned, link driver to bus
-    if (newDriver.assigned_bus_id) {
-      const targetBus = buses.find((b) => b.id === newDriver.assigned_bus_id);
-      if (targetBus) {
-        targetBus.assigned_driver_id = driverProfile.id;
-        dbStore.saveBus(targetBus);
-      }
-    }
-
-    dbStore.addAuditLog({
-      tenant_id: tenantId,
-      actor_id: profile.id,
-      actor_name: profile.full_name,
-      actor_role: profile.role,
-      action: 'ADD_BUS_DRIVER',
-      entity_type: 'DRIVER',
-      entity_id: driverProfile.id,
-      details: {
-        driver_name: newDriver.full_name,
-        license: driverProfile.license_number,
-        bus_id: newDriver.assigned_bus_id,
-      },
-    });
-
-    const updatedDrivers = dbStore.getProfilesByTenant(tenantId).filter((p) => p.role === 'driver');
-    setDrivers(updatedDrivers);
-    setSelectedDriverId(driverProfile.id);
-    setShowAddDriverModal(false);
-    setNewDriver({
-      full_name: '',
-      phone: '',
-      email: '',
-      license_number: '',
-      assigned_bus_id: buses[0]?.id || '',
-    });
-  };
-
   // Assign Bus to Driver
   const handleAssignBus = (busId: string) => {
     if (!activeDriver) return;
@@ -283,17 +213,6 @@ export const DriverPortal: React.FC = () => {
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {isManagement && (
-            <button
-              onClick={() => setShowAddDriverModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md transition cursor-pointer"
-              title="Register a new professional bus driver"
-            >
-              <Plus className="w-4 h-4 text-slate-950" />
-              <span>Add Bus Driver</span>
-            </button>
-          )}
-
           <span className="text-xs px-3 py-1.5 rounded-xl font-bold bg-amber-950 text-amber-300 border border-amber-800">
             DRIVER CONSOLE
           </span>
@@ -418,14 +337,8 @@ export const DriverPortal: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-amber-50 dark:bg-amber-950/40 p-4 rounded-xl border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
-          <span>No drivers registered for this company yet. Click &quot;Add Bus Driver&quot; above to register your first professional driver.</span>
-          <button
-            onClick={() => setShowAddDriverModal(true)}
-            className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-lg"
-          >
-            + Add First Driver
-          </button>
+        <div className="bg-amber-50 dark:bg-amber-950/40 p-4 rounded-xl border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+          <span>No drivers registered for this company yet. Company Administrators can onboard new drivers in the Company Owner / Admin Portal.</span>
         </div>
       )}
 
@@ -739,15 +652,9 @@ export const DriverPortal: React.FC = () => {
             </p>
           </div>
 
-          {isManagement && (
-            <button
-              onClick={() => setShowAddDriverModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold rounded-lg text-xs transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Register Driver</span>
-            </button>
-          )}
+          <span className="text-[10px] text-slate-400 font-medium">
+            (Roster managed in Company Admin Portal)
+          </span>
         </div>
 
         {drivers.length > 0 ? (
@@ -858,118 +765,12 @@ export const DriverPortal: React.FC = () => {
           </div>
         ) : (
           <div className="p-8 text-center text-slate-400">
-            No drivers registered yet. Click &quot;Add Bus Driver&quot; to onboard drivers for {tenant?.name}.
+            No drivers registered yet. Company Administrators can onboard new drivers in the Company Owner / Admin Portal.
           </div>
         )}
       </div>
 
-      {/* MODAL 1: ADD BUS DRIVER */}
-      {showAddDriverModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 text-xs">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Truck className="w-5 h-5 text-amber-500" />
-              Register Professional Bus Driver
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Authorized for Super Admin and Company Administrators for {tenant?.name}
-            </p>
-
-            <form onSubmit={handleCreateDriver} className="mt-4 space-y-3">
-              <div>
-                <label className="font-semibold block text-slate-700 dark:text-slate-300 mb-1">
-                  Driver Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Md. Jahangir Alam"
-                  value={newDriver.full_name}
-                  onChange={(e) => setNewDriver({ ...newDriver, full_name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-semibold block text-slate-700 dark:text-slate-300 mb-1">
-                    Mobile Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="+880 1712-..."
-                    value={newDriver.phone}
-                    onChange={(e) => setNewDriver({ ...newDriver, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-mono focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold block text-slate-700 dark:text-slate-300 mb-1">
-                    BRTA License Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="BRTA-PROF-DL-..."
-                    value={newDriver.license_number}
-                    onChange={(e) => setNewDriver({ ...newDriver, license_number: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-mono focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold block text-slate-700 dark:text-slate-300 mb-1">
-                  Email Address (Optional)
-                </label>
-                <input
-                  type="email"
-                  placeholder="driver@transport.bd"
-                  value={newDriver.email}
-                  onChange={(e) => setNewDriver({ ...newDriver, email: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold block text-slate-700 dark:text-slate-300 mb-1">
-                  Assign Initial Fleet Bus
-                </label>
-                <select
-                  value={newDriver.assigned_bus_id}
-                  onChange={(e) => setNewDriver({ ...newDriver, assigned_bus_id: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-semibold focus:outline-none"
-                >
-                  <option value="">None (Terminal Standby Pool)</option>
-                  {buses.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.reg_no})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setShowAddDriverModal(false)}
-                  className="px-3.5 py-1.5 font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold rounded-lg shadow cursor-pointer"
-                >
-                  Register Driver
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: ASSIGN BUS TO DRIVER */}
+      {/* MODAL: ASSIGN BUS TO DRIVER */}
       {showAssignBusModal && activeDriver && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 text-xs">
