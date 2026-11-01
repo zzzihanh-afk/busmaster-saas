@@ -28,12 +28,13 @@ import {
   Accessibility,
   Sparkles,
   Sliders,
+  Shield,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
 
 export const CounterAgentPortal: React.FC = () => {
-  const { tenant, counter, profile, switchCounter, isSuperAdmin, isCompanyOwner } = useAuth();
+  const { tenant, counter, profile, switchCounter, isSuperAdmin, isCompanyOwner, availableTenants } = useAuth();
   const tenantId = tenant?.id || '';
 
   const [trips, setTrips] = useState<Trip[]>(() => dbStore.getTrips(tenantId));
@@ -175,6 +176,7 @@ export const CounterAgentPortal: React.FC = () => {
     city: 'Dhaka',
     address: 'Central Terminal, Dhaka',
     contact_phone: '+880 1711-123456',
+    tenant_id: tenantId,
   });
 
   const [showAddTripModal, setShowAddTripModal] = useState(false);
@@ -286,17 +288,21 @@ export const CounterAgentPortal: React.FC = () => {
     seatFaresRecord[seatNum] = { fare: info.fare, type: info.type };
   });
 
-  // Quick Counter Creation
+  // Quick Counter Creation (Restricted to Super Admin in Counter POS Terminal)
   const handleCreateCounter = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCounter.name.trim()) return;
+
+    const targetTenantId = isSuperAdmin ? (newCounter.tenant_id || tenantId) : tenantId;
+    const targetTenant = availableTenants.find((t) => t.id === targetTenantId) || tenant;
+    const prefix = (targetTenant?.slug || 'CNT').substring(0, 3).toUpperCase();
     const code =
-      newCounter.code.trim() ||
-      `${(tenant?.slug || 'CNT').substring(0, 3).toUpperCase()}-${newCounter.city.substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+      newCounter.code.trim().toUpperCase() ||
+      `${prefix}-${newCounter.city.substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
 
     const createdCounter: Counter = {
       id: 'cnt-' + Date.now(),
-      tenant_id: tenantId,
+      tenant_id: targetTenantId,
       name: newCounter.name.trim(),
       code: code,
       city: newCounter.city.trim() || 'Dhaka',
@@ -307,8 +313,10 @@ export const CounterAgentPortal: React.FC = () => {
     dbStore.saveCounter(createdCounter);
     const updatedCounters = dbStore.getCounters(tenantId);
     setCounters(updatedCounters);
-    switchCounter(createdCounter.id);
-    setBoardingPoint(createdCounter.name);
+    if (targetTenantId === tenantId) {
+      switchCounter(createdCounter.id);
+      setBoardingPoint(createdCounter.name);
+    }
     setShowAddCounterModal(false);
   };
 
@@ -502,28 +510,31 @@ export const CounterAgentPortal: React.FC = () => {
               </select>
             ) : (
               <span className="text-amber-300 font-bold bg-amber-950/60 px-2.5 py-1 rounded-lg border border-amber-800 text-xs">
-                No Counter Assigned
+                No Counter Assigned (Exclusive to Company Portal)
               </span>
             )}
 
-            {/* Admin Add Counter Option */}
-            <button
-              onClick={() => {
-                setNewCounter({
-                  name: `${tenant?.name || 'Operator'} Main Counter`,
-                  code: '',
-                  city: 'Dhaka',
-                  address: 'Terminal Stand 1',
-                  contact_phone: '+880 1711-123456',
-                });
-                setShowAddCounterModal(true);
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold shadow transition cursor-pointer text-xs"
-              title="Add a new physical ticket counter"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Counter</span>
-            </button>
+            {/* Super Admin Exclusive Add Counter Override */}
+            {isSuperAdmin && (
+              <button
+                onClick={() => {
+                  setNewCounter({
+                    name: `${tenant?.name || 'Operator'} Main Counter`,
+                    code: '',
+                    city: 'Dhaka',
+                    address: 'Terminal Stand 1',
+                    contact_phone: '+880 1711-123456',
+                    tenant_id: tenantId,
+                  });
+                  setShowAddCounterModal(true);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-700 hover:bg-purple-600 text-white rounded-lg font-semibold shadow transition cursor-pointer text-xs"
+                title="Super Admin Authority: Register new physical ticket counter"
+              >
+                <Shield className="w-3.5 h-3.5 text-purple-200" />
+                <span>+ Add Counter (Super Admin)</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1283,6 +1294,31 @@ export const CounterAgentPortal: React.FC = () => {
             </p>
 
             <form onSubmit={handleCreateCounter} className="mt-4 space-y-3">
+              {/* Super Admin Operating Company Selector */}
+              <div>
+                <label className="font-semibold block text-slate-700 dark:text-slate-300 mb-1">
+                  Operating Company / Operator (Super Admin Authority) *
+                </label>
+                <select
+                  value={newCounter.tenant_id || tenantId}
+                  onChange={(e) => {
+                    const selT = availableTenants.find((t) => t.id === e.target.value);
+                    setNewCounter({
+                      ...newCounter,
+                      tenant_id: e.target.value,
+                      name: `${selT?.name || 'Operator'} Counter`,
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-purple-400 dark:border-purple-600 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 font-bold focus:outline-none"
+                >
+                  {availableTenants.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.slug.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="font-semibold block text-slate-700 dark:text-slate-300 mb-1">
                   Counter / Station Name *

@@ -312,6 +312,7 @@ export const SuperAdminPortal: React.FC = () => {
               {filteredTenants.map((t) => {
                 const companyBuses = allBuses.filter((b) => b.tenant_id === t.id);
                 const companyBookings = allBookings.filter((b) => b.tenant_id === t.id);
+                const companyCounters = dbStore.getCounters(t.id);
                 const companyAdmins = allProfiles.filter(
                   (p) => p.tenant_id === t.id && p.role === 'company_admin'
                 );
@@ -350,11 +351,11 @@ export const SuperAdminPortal: React.FC = () => {
 
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-slate-800 dark:text-slate-200">
-                        {companyBuses.length} Buses
-        </div>
+                        {companyBuses.length} Buses • {companyCounters.length} Counters
+                      </div>
                       <div className="text-[11px] text-slate-500">
                         {companyBookings.length} Bookings
-        </div>
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4">
