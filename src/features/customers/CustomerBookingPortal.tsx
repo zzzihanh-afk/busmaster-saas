@@ -868,11 +868,33 @@ export const CustomerBookingPortal: React.FC = () => {
                             const isAisle21 = colsCount === 3 && col === 1;
 
                             const renderIcon = () => {
-                              if (seatInfo.type === 'sleeper') return <Bed className="w-3.5 h-3.5" />;
-                              if (seatInfo.type === 'disabled') return <Accessibility className="w-3.5 h-3.5" />;
-                              if (seatInfo.type === 'female') return <Armchair className="w-3.5 h-3.5" />;
-                              if (seatInfo.type === 'premium') return <Sparkles className="w-3.5 h-3.5" />;
-                              return <Armchair className="w-3.5 h-3.5" />;
+                              const iconColor = isBooked
+                                ? seatInfo.type === 'sleeper'
+                                  ? 'text-purple-600 dark:text-purple-400'
+                                  : seatInfo.type === 'disabled'
+                                  ? 'text-teal-600 dark:text-teal-400'
+                                  : seatInfo.type === 'female'
+                                  ? 'text-pink-600 dark:text-pink-400'
+                                  : seatInfo.type === 'premium'
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : 'text-slate-400 dark:text-slate-500'
+                                : isSelected
+                                ? 'text-white'
+                                : seatInfo.type === 'sleeper'
+                                ? 'text-purple-700 dark:text-purple-300'
+                                : seatInfo.type === 'disabled'
+                                ? 'text-teal-700 dark:text-teal-300'
+                                : seatInfo.type === 'female'
+                                ? 'text-pink-700 dark:text-pink-300'
+                                : seatInfo.type === 'premium'
+                                ? 'text-amber-700 dark:text-amber-300'
+                                : 'text-slate-700 dark:text-slate-200';
+
+                              if (seatInfo.type === 'sleeper') return <Bed className={`w-3.5 h-3.5 ${iconColor}`} />;
+                              if (seatInfo.type === 'disabled') return <Accessibility className={`w-3.5 h-3.5 ${iconColor}`} />;
+                              if (seatInfo.type === 'female') return <Armchair className={`w-3.5 h-3.5 ${iconColor}`} />;
+                              if (seatInfo.type === 'premium') return <Sparkles className={`w-3.5 h-3.5 ${iconColor}`} />;
+                              return <Armchair className={`w-3.5 h-3.5 ${iconColor}`} />;
                             };
 
                             let seatStyle =
@@ -881,8 +903,17 @@ export const CustomerBookingPortal: React.FC = () => {
                               seatStyle =
                                 'bg-blue-600 text-white ring-2 ring-blue-400 font-bold scale-105 shadow-md shadow-blue-500/25';
                             } else if (isBooked) {
-                              seatStyle =
-                                'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 opacity-70 cursor-not-allowed border-rose-300 dark:border-rose-800';
+                              const topAccent =
+                                seatInfo.type === 'sleeper'
+                                  ? 'border-t-[3px] border-t-purple-500'
+                                  : seatInfo.type === 'disabled'
+                                  ? 'border-t-[3px] border-t-teal-500'
+                                  : seatInfo.type === 'female'
+                                  ? 'border-t-[3px] border-t-pink-500'
+                                  : seatInfo.type === 'premium'
+                                  ? 'border-t-[3px] border-t-amber-500'
+                                  : 'border-t-[3px] border-t-slate-400 dark:border-t-slate-500';
+                              seatStyle = `bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 cursor-not-allowed opacity-75 ${topAccent}`;
                             } else if (seatInfo.type === 'sleeper') {
                               seatStyle =
                                 'bg-purple-50 text-purple-800 border-purple-400 dark:bg-purple-950/70 dark:text-purple-200 dark:border-purple-600 hover:border-purple-500';
@@ -904,22 +935,48 @@ export const CustomerBookingPortal: React.FC = () => {
                                   disabled={isBooked}
                                   onClick={() => handleSeatClick(seatNumber, isBooked)}
                                   title={`${seatNumber} • ${seatInfo.type.toUpperCase()}${seatInfo.isAccessible ? ' (Priority Accessible)' : ''} • Segment Fare: ৳${seatInfo.fare}${isBooked ? ' (Already Booked for this segment)' : ''}`}
-                                  className={`w-10 h-11 rounded-xl flex flex-col items-center justify-center font-bold font-mono text-[10px] transition cursor-pointer shadow-sm relative border ${seatStyle} ${
+                                  className={`w-11 h-12 rounded-xl flex flex-col items-center justify-center font-bold font-mono text-[10px] transition cursor-pointer shadow-sm relative border ${seatStyle} ${
                                     !matchesFilter && !isSelected && !isBooked ? 'opacity-35 hover:opacity-100' : ''
                                   } ${
                                     matchesFilter && selectedSeatTypeFilter !== 'all' && !isSelected && !isBooked ? 'ring-2 ring-blue-500 scale-105' : ''
                                   }`}
                                 >
                                   {renderIcon()}
-                                  <span className="leading-none mt-0.5">{seatNumber}</span>
-                                  {seatInfo.type === 'sleeper' && (
-                                    <span className="text-[7px] font-extrabold uppercase tracking-tighter leading-none text-purple-700 dark:text-purple-300">
-                                      BED
+                                  <span className={`leading-none mt-0.5 ${isBooked ? 'text-slate-500 dark:text-slate-400 line-through decoration-slate-400/60' : ''}`}>
+                                    {seatNumber}
+                                  </span>
+                                  {isBooked ? (
+                                    <span className="text-[6px] font-black uppercase tracking-tight leading-none text-center">
+                                      {seatInfo.type === 'sleeper' && (
+                                        <span className="text-purple-700 dark:text-purple-400">BED · SOLD</span>
+                                      )}
+                                      {seatInfo.type === 'female' && (
+                                        <span className="text-pink-700 dark:text-pink-400">WOMEN · SOLD</span>
+                                      )}
+                                      {seatInfo.type === 'disabled' && (
+                                        <span className="text-teal-700 dark:text-teal-400">♿ · SOLD</span>
+                                      )}
+                                      {seatInfo.type === 'premium' && (
+                                        <span className="text-amber-700 dark:text-amber-400">VIP · SOLD</span>
+                                      )}
+                                      {seatInfo.type === 'regular' && (
+                                        <span className="text-slate-400 dark:text-slate-500">SOLD</span>
+                                      )}
                                     </span>
-                                  )}
-                                  {seatInfo.type === 'disabled' && (
-                                    <span className="text-[7px] font-extrabold uppercase tracking-tighter leading-none text-teal-700 dark:text-teal-300">
-                                      ♿
+                                  ) : (
+                                    <span className="text-[7px] font-extrabold uppercase tracking-tighter leading-none text-center">
+                                      {seatInfo.type === 'sleeper' && (
+                                        <span className="text-purple-700 dark:text-purple-300">BED</span>
+                                      )}
+                                      {seatInfo.type === 'female' && (
+                                        <span className="text-pink-700 dark:text-pink-300">WOMEN</span>
+                                      )}
+                                      {seatInfo.type === 'disabled' && (
+                                        <span className="text-teal-700 dark:text-teal-300">♿</span>
+                                      )}
+                                      {seatInfo.type === 'premium' && (
+                                        <span className="text-amber-700 dark:text-amber-300">VIP</span>
+                                      )}
                                     </span>
                                   )}
                                 </button>
@@ -936,19 +993,19 @@ export const CustomerBookingPortal: React.FC = () => {
                 {/* Legend */}
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-[11px]">
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200">
-                    <Bed className="w-3 h-3" /> Sleeper Berth (৳{sleeperFare})
+                    <Bed className="w-3 h-3 text-purple-600" /> Sleeper Berth (৳{sleeperFare})
                   </span>
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200">
-                    <Accessibility className="w-3 h-3" /> Accessible (৳{disabledFare})
+                    <Accessibility className="w-3 h-3 text-teal-600" /> Accessible (৳{disabledFare})
                   </span>
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200">
-                    <Armchair className="w-3 h-3" /> Female Only
+                    <Armchair className="w-3 h-3 text-pink-600" /> Female Only
                   </span>
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200">
-                    <Sparkles className="w-3 h-3" /> VIP (৳{premiumFare})
+                    <Sparkles className="w-3 h-3 text-amber-600" /> VIP (৳{premiumFare})
                   </span>
-                  <span className="flex items-center gap-1 text-slate-500">
-                    <span className="w-2.5 h-2.5 rounded bg-rose-500" /> Booked for Segment
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700">
+                    <span className="w-2.5 h-2.5 rounded bg-slate-200 dark:bg-slate-700 border-t-2 border-t-purple-500 border-slate-400" /> Booked / Sold (Type Preserved)
                   </span>
                 </div>
               </div>
