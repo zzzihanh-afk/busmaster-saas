@@ -1511,6 +1511,12 @@ class SaaSDataStore {
     this.notify();
   }
 
+  public deleteRoute(id: string): void {
+    this.routes = this.routes.filter((r) => r.id !== id);
+    saveToStorage('routes', this.routes);
+    this.notify();
+  }
+
   // ------------------ Trips ------------------
   public getTrips(tenantId?: string): Trip[] {
     if (tenantId) {
