@@ -1195,13 +1195,16 @@ export const CounterAgentPortal: React.FC = () => {
                   </div>
                 </div>
 
-                {/* QR Code */}
+                {/* QR Code & Verification Key */}
                 <div className="pt-2 flex flex-col items-center justify-center border-t border-dashed border-slate-300 gap-1">
                   <QRCodeSVG
                     value={`BUSMASTER:${confirmedBooking.booking_ref}:${confirmedBooking.trip_id}:${confirmedBooking.seats?.map((s) => s.seat_number).join(',')}`}
                     size={80}
                   />
-                  <span className="text-[9px] text-slate-400">Scan at boarding gate</span>
+                  <span className="font-mono font-bold text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                    Verification Code: {confirmedBooking.booking_ref}
+                  </span>
+                  <span className="text-[9px] text-slate-400">Scan QR or enter code at boarding gate</span>
                 </div>
               </div>
             </div>
