@@ -42,61 +42,7 @@ export const SupportPortal: React.FC = () => {
     profile.role === 'counter_manager' ? profile.id : defaultManager.id
   );
 
-  const [tickets, setTickets] = useState<SupportTicket[]>([
-    {
-      id: 'st-01',
-      tenant_id: tenantId,
-      booking_ref: 'BM-GL-1001',
-      subject: 'Inquiry regarding baggage luggage limit for Scania bus',
-      message: 'Can I bring 2 medium suitcases on the morning 06:00 AM trip to Chattogram?',
-      priority: 'normal',
-      status: 'resolved',
-      created_at: new Date(Date.now() - 86400000).toISOString(),
-      replies: [
-        {
-          id: 'rep-01',
-          ticket_id: 'st-01',
-          sender_name: 'Kabir Hossain',
-          sender_role: 'COUNTER MANAGER',
-          message:
-            'Hello Mahbubur! Yes, each passenger is allowed up to 2 standard pieces of luggage (maximum 20kg total) stored in the coach boot. Handbags can be taken inside the cabin.',
-          created_at: new Date(Date.now() - 72000000).toISOString(),
-        },
-      ],
-    },
-    {
-      id: 'st-02',
-      tenant_id: tenantId,
-      booking_ref: 'BM-GL-1003',
-      subject: 'Request for AC temperature adjustment on Seat B1',
-      message: 'Bus was very cold during night journey, kindly instruct driver assistant.',
-      priority: 'normal',
-      status: 'in_progress',
-      created_at: new Date(Date.now() - 3600000).toISOString(),
-      replies: [
-        {
-          id: 'rep-02',
-          ticket_id: 'st-02',
-          sender_name: 'Kabir Hossain',
-          sender_role: 'COUNTER MANAGER',
-          message:
-            'Dear passenger, thank you for your feedback. We have instructed the coach driver assistant to maintain the AC climate at 24°C on this night departure. Please let our assistant know if you need an additional blanket.',
-          created_at: new Date(Date.now() - 1800000).toISOString(),
-        },
-      ],
-    },
-    {
-      id: 'st-03',
-      tenant_id: tenantId,
-      booking_ref: 'BM-HN-505',
-      subject: 'Change of passenger phone number on confirmed ticket',
-      message: 'My contact number changed, please update ticket notification details.',
-      priority: 'high',
-      status: 'open',
-      created_at: new Date(Date.now() - 1800000).toISOString(),
-      replies: [],
-    },
-  ]);
+  const [tickets, setTickets] = useState<SupportTicket[]>(() => dbStore.getSupportTickets(tenantId));
 
   // Expanded ticket for viewing conversation & replying
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>('st-02');
@@ -116,6 +62,7 @@ export const SupportPortal: React.FC = () => {
         .getProfilesByTenant(tenantId)
         .filter((p) => p.role === 'counter_manager' || p.role === 'company_admin' || p.role === 'company_owner');
       setManagers(updated);
+      setTickets(dbStore.getSupportTickets(tenantId));
     });
     return unsub;
   }, [tenantId]);
@@ -129,7 +76,7 @@ export const SupportPortal: React.FC = () => {
     const ticket: SupportTicket = {
       id: 'st-' + Date.now(),
       tenant_id: tenantId,
-      booking_ref: newRef,
+      booking_ref: newRef.trim().toUpperCase() || undefined,
       subject: newSubject,
       message: newMessage,
       priority: newPriority,
@@ -137,7 +84,7 @@ export const SupportPortal: React.FC = () => {
       replies: [],
       created_at: new Date().toISOString(),
     };
-    setTickets([ticket, ...tickets]);
+    dbStore.createSupportTicket(ticket);
     setExpandedTicketId(ticket.id);
     setShowNewModal(false);
     setNewSubject('');
@@ -168,21 +115,7 @@ export const SupportPortal: React.FC = () => {
     };
 
     const targetStatus = replyStatusMap[ticketId] || 'in_progress';
-
-    setTickets(
-      tickets.map((t) => {
-        if (t.id === ticketId) {
-          const updatedReplies = [...(t.replies || []), newReply];
-          return {
-            ...t,
-            status: targetStatus,
-            replies: updatedReplies,
-            updated_at: new Date().toISOString(),
-          };
-        }
-        return t;
-      })
-    );
+    dbStore.addSupportReply(ticketId, newReply, targetStatus);
 
     // Clear input
     setReplyTextMap({ ...replyTextMap, [ticketId]: '' });
@@ -205,9 +138,7 @@ export const SupportPortal: React.FC = () => {
   };
 
   const handleUpdateStatus = (id: string, status: SupportTicket['status']) => {
-    setTickets(
-      tickets.map((t) => (t.id === id ? { ...t, status, updated_at: new Date().toISOString() } : t))
-    );
+    dbStore.updateSupportTicketStatus(id, status);
   };
 
   return (
@@ -359,31 +290,54 @@ export const SupportPortal: React.FC = () => {
                       <p className="text-slate-700 dark:text-slate-300 text-xs">{t.message}</p>
                     </div>
 
-                    {/* Threaded Replies (Always Authored by Manager) */}
+                    {/* Threaded Replies */}
                     {t.replies && t.replies.length > 0 && (
                       <div className="space-y-2 pl-4 border-l-2 border-emerald-500">
-                        {t.replies.map((rep) => (
-                          <div
-                            key={rep.id}
-                            className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-900 space-y-1"
-                          >
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
-                                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                {rep.sender_name}{' '}
-                                <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-100 dark:bg-emerald-900 px-1.5 py-0.2 rounded">
-                                  {rep.sender_role}
+                        {t.replies.map((rep) => {
+                          const isPassenger = rep.sender_role === 'PASSENGER';
+                          return (
+                            <div
+                              key={rep.id}
+                              className={`p-3 rounded-lg border space-y-1 ${
+                                isPassenger
+                                  ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900'
+                                  : 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span
+                                  className={`font-bold flex items-center gap-1.5 ${
+                                    isPassenger
+                                      ? 'text-blue-900 dark:text-blue-200'
+                                      : 'text-emerald-900 dark:text-emerald-200'
+                                  }`}
+                                >
+                                  {isPassenger ? (
+                                    <User className="w-3.5 h-3.5 text-blue-600" />
+                                  ) : (
+                                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                  )}
+                                  {rep.sender_name}{' '}
+                                  <span
+                                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                                      isPassenger
+                                        ? 'text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900'
+                                        : 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900'
+                                    }`}
+                                  >
+                                    {rep.sender_role}
+                                  </span>
                                 </span>
-                              </span>
-                              <span className="text-slate-400">
-                                {new Date(rep.created_at).toLocaleTimeString()}
-                              </span>
+                                <span className="text-slate-400">
+                                  {new Date(rep.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <p className="text-slate-800 dark:text-slate-200 text-xs leading-relaxed">
+                                {rep.message}
+                              </p>
                             </div>
-                            <p className="text-slate-800 dark:text-slate-200 text-xs leading-relaxed">
-                              {rep.message}
-                            </p>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 

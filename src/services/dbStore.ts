@@ -20,6 +20,7 @@ import {
   Expense,
   AuditLog,
   SupportTicket,
+  SupportReply,
   Review,
 } from '../types';
 import { indexedDb } from './indexedDbAdapter';
@@ -1032,6 +1033,62 @@ const INITIAL_CASH_SESSIONS: CashSession[] = [
   },
 ];
 
+const INITIAL_SUPPORT_TICKETS: SupportTicket[] = [
+  {
+    id: 'st-01',
+    tenant_id: 't-greenline-01',
+    booking_ref: 'BM-GL-1001',
+    subject: 'Inquiry regarding baggage luggage limit for Scania bus',
+    message: 'Can I bring 2 medium suitcases on the morning 06:00 AM trip to Chattogram?',
+    priority: 'normal',
+    status: 'resolved',
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+    replies: [
+      {
+        id: 'rep-01',
+        ticket_id: 'st-01',
+        sender_name: 'Kabir Hossain',
+        sender_role: 'COUNTER MANAGER',
+        message:
+          'Hello Mahbubur! Yes, each passenger is allowed up to 2 standard pieces of luggage (maximum 20kg total) stored in the coach boot. Handbags can be taken inside the cabin.',
+        created_at: new Date(Date.now() - 72000000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: 'st-02',
+    tenant_id: 't-greenline-01',
+    booking_ref: 'BM-GL-1003',
+    subject: 'Request for AC temperature adjustment on Seat B1',
+    message: 'Bus was very cold during night journey, kindly instruct driver assistant.',
+    priority: 'normal',
+    status: 'in_progress',
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+    replies: [
+      {
+        id: 'rep-02',
+        ticket_id: 'st-02',
+        sender_name: 'Kabir Hossain',
+        sender_role: 'COUNTER MANAGER',
+        message:
+          'Dear passenger, thank you for your feedback. We have instructed the coach driver assistant to maintain the AC climate at 24°C on this night departure. Please let our assistant know if you need an additional blanket.',
+        created_at: new Date(Date.now() - 1800000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: 'st-03',
+    tenant_id: 't-hanif-01',
+    booking_ref: 'BM-HN-505',
+    subject: 'Change of passenger phone number on confirmed ticket',
+    message: 'My contact number changed, please update ticket notification details.',
+    priority: 'high',
+    status: 'open',
+    created_at: new Date(Date.now() - 1800000).toISOString(),
+    replies: [],
+  },
+];
+
 // Helper to load or persist into localStorage
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -1109,7 +1166,7 @@ class SaaSDataStore {
   private expenses: Expense[] = loadFromStorage('expenses', INITIAL_EXPENSES);
   private refunds: Refund[] = loadFromStorage('refunds', []);
   private auditLogs: AuditLog[] = loadFromStorage('audit_logs', INITIAL_AUDIT_LOGS);
-  private supportTickets: SupportTicket[] = loadFromStorage('support_tickets', []);
+  private supportTickets: SupportTicket[] = loadFromStorage('support_tickets', INITIAL_SUPPORT_TICKETS);
   private reviews: Review[] = loadFromStorage('reviews', []);
 
   // Listeners for UI state reactivity
@@ -1153,6 +1210,11 @@ class SaaSDataStore {
         if (sleeperInit) this.seatLayouts.push(sleeperInit);
       }
       saveToStorage('seat_layouts', this.seatLayouts);
+    }
+
+    if (this.supportTickets.length === 0) {
+      this.supportTickets = [...INITIAL_SUPPORT_TICKETS];
+      saveToStorage('support_tickets', this.supportTickets);
     }
 
     // Hydrate IndexedDB database in background on startup
@@ -2256,6 +2318,59 @@ class SaaSDataStore {
     this.auditLogs.unshift(newLog);
     saveToStorage('audit_logs', this.auditLogs);
     this.notify();
+  }
+
+  // ------------------ Support Tickets & Complaints ------------------
+  public getSupportTickets(tenantId?: string): SupportTicket[] {
+    if (tenantId) {
+      return this.supportTickets.filter((t) => t.tenant_id === tenantId);
+    }
+    return [...this.supportTickets];
+  }
+
+  public getSupportTicketById(id: string): SupportTicket | undefined {
+    return this.supportTickets.find((t) => t.id === id);
+  }
+
+  public getSupportTicketsByBookingRef(ref: string): SupportTicket[] {
+    const clean = ref.trim().toUpperCase();
+    return this.supportTickets.filter(
+      (t) => (t.booking_ref && t.booking_ref.toUpperCase() === clean) || t.id.toUpperCase() === clean
+    );
+  }
+
+  public createSupportTicket(ticket: SupportTicket): SupportTicket {
+    this.supportTickets.unshift(ticket);
+    saveToStorage('support_tickets', this.supportTickets);
+    persistEntity('support_tickets', ticket);
+    this.notify();
+    return ticket;
+  }
+
+  public addSupportReply(ticketId: string, reply: SupportReply, newStatus?: SupportTicket['status']): boolean {
+    const ticket = this.supportTickets.find((t) => t.id === ticketId);
+    if (!ticket) return false;
+    if (!ticket.replies) ticket.replies = [];
+    ticket.replies.push(reply);
+    if (newStatus) {
+      ticket.status = newStatus;
+    }
+    ticket.updated_at = new Date().toISOString();
+    saveToStorage('support_tickets', this.supportTickets);
+    persistEntity('support_tickets', ticket);
+    this.notify();
+    return true;
+  }
+
+  public updateSupportTicketStatus(ticketId: string, status: SupportTicket['status']): boolean {
+    const ticket = this.supportTickets.find((t) => t.id === ticketId);
+    if (!ticket) return false;
+    ticket.status = status;
+    ticket.updated_at = new Date().toISOString();
+    saveToStorage('support_tickets', this.supportTickets);
+    persistEntity('support_tickets', ticket);
+    this.notify();
+    return true;
   }
 
   public getAllDataForTable(table: string): any[] {

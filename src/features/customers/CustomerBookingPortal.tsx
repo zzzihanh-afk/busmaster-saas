@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { dbStore } from '../../services/dbStore';
-import { Trip, Booking, SeatType, RouteStop } from '../../types';
+import { Trip, Booking, SeatType, RouteStop, SupportTicket, SupportReply } from '../../types';
 import {
   Search,
   Bus as BusIcon,
@@ -34,9 +34,77 @@ import {
   Lock,
   Shield,
   Loader2,
+  MessageSquare,
+  HelpCircle,
+  Send,
+  AlertCircle,
+  Phone,
+  ExternalLink,
+  MessageCircle,
+  FileText,
+  Headphones,
+  Users,
+  ChevronDown,
+  ChevronUp,
+  UserCheck,
+  User,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
+
+const OPERATOR_SUPPORT_DIRECTORY = [
+  {
+    name: 'Hanif Enterprise',
+    hotline: '16334',
+    phone: '+880 1819-654321',
+    whatsapp: '+880 1711-999888',
+    whatsappGroupLink: 'https://chat.whatsapp.com/example-hanif-support',
+    email: 'support@hanifenterprise.bd',
+    coverage: 'Nationwide (Chattogram, Rangpur, Cox\'s Bazar, Sylhet)',
+    status: '24/7 Active',
+  },
+  {
+    name: 'Green Line Paribahan',
+    hotline: '16298',
+    phone: '+880 1711-123456',
+    whatsapp: '+880 1711-999888',
+    whatsappGroupLink: 'https://chat.whatsapp.com/example-greenline-support',
+    email: 'support@greenlinebd.com',
+    coverage: 'Premium AC & Sleeper Coach Routes',
+    status: '24/7 Active',
+  },
+  {
+    name: 'Shohagh Paribahan',
+    hotline: '16440',
+    phone: '+880 1711-987654',
+    whatsapp: '+880 1711-999888',
+    whatsappGroupLink: 'https://chat.whatsapp.com/example-shohagh-support',
+    email: 'help@shohagh.com',
+    coverage: 'Intercity Scania & Business Class Services',
+    status: '24/7 Active',
+  },
+  {
+    name: 'Shyamoli NR Travels',
+    hotline: '16550',
+    phone: '+880 1819-112233',
+    whatsapp: '+880 1711-999888',
+    whatsappGroupLink: 'https://chat.whatsapp.com/example-shyamoli-support',
+    email: 'customercare@shyamolinr.com',
+    coverage: 'North Bengal & Cross-border Routes',
+    status: '24/7 Active',
+  },
+];
+
+const COMPLAINT_CATEGORIES = [
+  { id: 'ac', label: '❄️ AC / Cabin Temperature', desc: 'Too cold or warm during journey' },
+  { id: 'behavior', label: '👨‍✈️ Driver or Helper Conduct', desc: 'Rude behavior, reckless driving, or assistant issue' },
+  { id: 'luggage', label: '🧳 Baggage Lost & Found', desc: 'Luggage misplaced or boot storage inquiry' },
+  { id: 'delay', label: '⏱️ Highway Delay & Halts', desc: 'Unnotified halts or major departure delay' },
+  { id: 'refund', label: '💳 Online Refund Dispute', desc: 'Cancellation refund assistance or failed charge' },
+  { id: 'seat', label: '💺 Damaged / Dirty Seat', desc: 'Recliner broken or occupied by unverified person' },
+  { id: 'inquiry', label: '❓ Station Counter Inquiry', desc: 'Boarding point location or timetable inquiry' },
+];
 
 export const CustomerBookingPortal: React.FC = () => {
   const allTenants = dbStore.getTenants().filter((t) => t.status === 'active' || t.status === 'approved');
@@ -48,10 +116,28 @@ export const CustomerBookingPortal: React.FC = () => {
   const [journeyDate, setJourneyDate] = useState(new Date().toISOString().split('T')[0]);
   const [busTypeFilter, setBusTypeFilter] = useState<'all' | 'AC' | 'Non-AC'>('all');
 
-  // Active Flow: 'search' | 'seat_select' | 'checkout' | 'confirmed' | 'my_tickets'
-  const [viewStep, setViewStep] = useState<'search' | 'seat_select' | 'checkout' | 'confirmed' | 'my_tickets'>('search');
+  // Active Flow: 'search' | 'seat_select' | 'checkout' | 'confirmed' | 'my_tickets' | 'support_complaint'
+  const [viewStep, setViewStep] = useState<
+    'search' | 'seat_select' | 'checkout' | 'confirmed' | 'my_tickets' | 'support_complaint'
+  >('search');
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+
+  // Support & Complaints State
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() => dbStore.getSupportTickets());
+  const [supportSubTab, setSupportSubTab] = useState<'file_complaint' | 'track_complaints' | 'hotlines_group'>('file_complaint');
+  const [complaintTenantId, setComplaintTenantId] = useState<string>(allTenants[0]?.id || 't-greenline-01');
+  const [complaintBookingRef, setComplaintBookingRef] = useState<string>('');
+  const [complaintCategory, setComplaintCategory] = useState<string>('ac');
+  const [complaintPriority, setComplaintPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
+  const [complaintSubject, setComplaintSubject] = useState<string>('');
+  const [complaintMessage, setComplaintMessage] = useState<string>('');
+  const [complaintPassengerName, setComplaintPassengerName] = useState<string>('');
+  const [complaintPassengerPhone, setComplaintPassengerPhone] = useState<string>('');
+  const [searchComplaintQuery, setSearchComplaintQuery] = useState<string>('');
+  const [selectedTicketForChat, setSelectedTicketForChat] = useState<string | null>(null);
+  const [passengerReplyText, setPassengerReplyText] = useState<string>('');
+  const [submittedTicketSuccess, setSubmittedTicketSuccess] = useState<SupportTicket | null>(null);
 
   // Segment Selection State (Boarding to Dropping)
   const [fromSeq, setFromSeq] = useState<number>(1);
@@ -140,6 +226,7 @@ export const CustomerBookingPortal: React.FC = () => {
     const unsub = dbStore.subscribe(() => {
       setAllTrips(dbStore.getTrips());
       setMyBookings(dbStore.getBookings());
+      setSupportTickets(dbStore.getSupportTickets());
       if (selectedTrip) {
         const statuses = dbStore.getSeatStatusesForSegment(selectedTrip.id, fromSeq, toSeq);
         setSeatStatuses(statuses);
@@ -147,6 +234,78 @@ export const CustomerBookingPortal: React.FC = () => {
     });
     return () => unsub();
   }, [selectedTrip?.id, fromSeq, toSeq]);
+
+  const handleOpenComplaintForTicket = (booking: Booking) => {
+    setComplaintTenantId(booking.tenant_id);
+    setComplaintBookingRef(booking.booking_ref);
+    setComplaintPassengerName(booking.passenger_name);
+    setComplaintPassengerPhone(booking.passenger_phone || '');
+    setComplaintSubject(`Service assistance for Journey: ${booking.from_stop_name} to ${booking.to_stop_name}`);
+    setViewStep('support_complaint');
+    setSupportSubTab('file_complaint');
+    setSubmittedTicketSuccess(null);
+  };
+
+  const handleSubmitComplaint = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!complaintSubject.trim() || !complaintMessage.trim()) {
+      alert('Please provide both a subject and details for your complaint.');
+      return;
+    }
+    if (!complaintPassengerName.trim() || !complaintPassengerPhone.trim()) {
+      alert('Please enter your name and contact phone number so counter managers can respond.');
+      return;
+    }
+
+    const ticketId = `st-${Date.now().toString().slice(-6)}`;
+    const nowIso = new Date().toISOString();
+    const newTicket: SupportTicket = {
+      id: ticketId,
+      tenant_id: complaintTenantId,
+      booking_ref: complaintBookingRef.trim() || undefined,
+      subject: complaintSubject.trim(),
+      message: complaintMessage.trim(),
+      priority: complaintPriority,
+      status: 'open',
+      created_at: nowIso,
+      updated_at: nowIso,
+      replies: [
+        {
+          id: `rep-${Date.now()}`,
+          ticket_id: ticketId,
+          sender_name: `${complaintPassengerName.trim()} (${complaintPassengerPhone.trim()})`,
+          sender_role: 'PASSENGER',
+          message: complaintMessage.trim(),
+          created_at: nowIso,
+        },
+      ],
+    };
+
+    dbStore.createSupportTicket(newTicket);
+    setSupportTickets(dbStore.getSupportTickets());
+    setSubmittedTicketSuccess(newTicket);
+    setSelectedTicketForChat(ticketId);
+    setComplaintSubject('');
+    setComplaintMessage('');
+  };
+
+  const handleSendPassengerReply = (ticketId: string) => {
+    if (!passengerReplyText.trim()) return;
+
+    const senderName = complaintPassengerName.trim() || 'Passenger';
+    const newReply: SupportReply = {
+      id: `rep-${Date.now()}`,
+      ticket_id: ticketId,
+      sender_name: senderName,
+      sender_role: 'PASSENGER',
+      message: passengerReplyText.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    dbStore.addSupportReply(ticketId, newReply, 'open');
+    setPassengerReplyText('');
+    setSupportTickets(dbStore.getSupportTickets());
+  };
 
   // Update seatStatuses whenever trip or segment selection changes
   useEffect(() => {
@@ -436,11 +595,11 @@ export const CustomerBookingPortal: React.FC = () => {
         </div>
 
         {/* Floating Quick Navigation Tabs */}
-        <div className="relative z-10 flex gap-2 pt-6">
+        <div className="relative z-10 flex flex-wrap gap-2 pt-6">
           <button
             onClick={() => setViewStep('search')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              viewStep !== 'my_tickets'
+              viewStep !== 'my_tickets' && viewStep !== 'support_complaint'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                 : 'bg-slate-800/80 text-slate-300 hover:text-white'
             }`}
@@ -463,6 +622,23 @@ export const CustomerBookingPortal: React.FC = () => {
                 {myBookings.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => {
+              setViewStep('support_complaint');
+              setSubmittedTicketSuccess(null);
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              viewStep === 'support_complaint'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                : 'bg-slate-800/80 text-slate-300 hover:text-white'
+            }`}
+          >
+            <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Complaints & Support Group</span>
+            <span className="ml-1 px-1.5 py-0.2 bg-emerald-500/30 text-emerald-300 text-[10px] rounded-full font-mono">
+              24/7 Desk
+            </span>
           </button>
         </div>
       </div>
@@ -1738,6 +1914,16 @@ export const CustomerBookingPortal: React.FC = () => {
               </button>
             )}
 
+            {/* Support / Complaint Button for this Journey */}
+            <button
+              type="button"
+              onClick={() => handleOpenComplaintForTicket(confirmedBooking)}
+              className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer text-xs"
+            >
+              <MessageSquarePlus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Need Help or File a Complaint for this Journey</span>
+            </button>
+
             {confirmedBooking.ticket_status === 'cancellation_requested' && (
               <div className="text-center p-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-500 text-[11px] font-semibold">
                 ⏳ Cancellation is waiting for Counter Acceptance. Check back or visit the counter.
@@ -1841,7 +2027,7 @@ export const CustomerBookingPortal: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => {
                           setConfirmedBooking(b);
@@ -1850,6 +2036,15 @@ export const CustomerBookingPortal: React.FC = () => {
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1 shadow-sm"
                       >
                         <span>View QR Ticket</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenComplaintForTicket(b)}
+                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1 border border-emerald-200 dark:border-emerald-800"
+                        title="File complaint or contact support for this trip"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Complain</span>
                       </button>
 
                       {b.ticket_status === 'confirmed' && (
@@ -1873,6 +2068,660 @@ export const CustomerBookingPortal: React.FC = () => {
                 </div>
               ))}
           </div>
+        </div>
+      )}
+
+      {/* PASSENGER COMPLAINT & SUPPORT DESK / SUPPORT GROUP STEP */}
+      {viewStep === 'support_complaint' && (
+        <div className="space-y-6 max-w-4xl mx-auto text-xs">
+          {/* Top Banner & Quick Sub-tabs */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                    <Headphones className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      Passenger Support &amp; Complaint Desk
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">
+                        24/7 Available
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      File service complaints, track responses from Station Counter Managers, or connect via official passenger WhatsApp support groups.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-tabs selector */}
+              <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSupportSubTab('file_complaint');
+                    setSubmittedTicketSuccess(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                    supportSubTab === 'file_complaint'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <MessageSquarePlus className="w-3.5 h-3.5" />
+                  <span>File Complaint</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSupportSubTab('track_complaints')}
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                    supportSubTab === 'track_complaints'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Live Complaints ({supportTickets.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSupportSubTab('hotlines_group')}
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                    supportSubTab === 'hotlines_group'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Support Groups &amp; Hotlines</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Emergency Hotline Ticker */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-amber-900 dark:text-amber-300">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Phone className="w-3.5 h-3.5 text-amber-600" />
+                <span>Instant Travel Hotlines:</span>
+                <span className="font-mono">Hanif: 16334</span>
+                <span>•</span>
+                <span className="font-mono">Green Line: 16298</span>
+                <span>•</span>
+                <span className="font-mono">Shohagh: 16440</span>
+                <span>•</span>
+                <span className="font-mono">Shyamoli: 16550</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-900 font-bold text-[10px]">
+                  Emergency: 999
+                </span>
+                <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold text-[10px]">
+                  BRTA: 16107
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* SUB-TAB 1: FILE COMPLAINT */}
+          {supportSubTab === 'file_complaint' && (
+            <div className="space-y-4">
+              {submittedTicketSuccess ? (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border-2 border-emerald-500 shadow-lg space-y-4 text-center animate-in fade-in">
+                  <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Complaint Case #{submittedTicketSuccess.id} Lodged Successfully!
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                      Your complaint has been dispatched directly to the Station Counter Manager. They will review and respond to you shortly.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl max-w-md mx-auto text-left space-y-1.5 border border-slate-200 dark:border-slate-700 font-mono text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Subject:</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{submittedTicketSuccess.subject}</span>
+                    </div>
+                    {submittedTicketSuccess.booking_ref && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Linked PNR:</span>
+                        <span className="font-bold text-blue-600">{submittedTicketSuccess.booking_ref}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Status:</span>
+                      <span className="font-bold text-amber-600 uppercase">Open (Waiting for Counter Response)</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSupportSubTab('track_complaints');
+                        setSelectedTicketForChat(submittedTicketSuccess.id);
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl cursor-pointer text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/30"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>View Live Conversation &amp; Track Status</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSubmittedTicketSuccess(null)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl cursor-pointer text-xs"
+                    >
+                      File Another Complaint
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleSubmitComplaint}
+                  className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md space-y-5"
+                >
+                  <div className="border-b border-slate-200 dark:border-slate-700 pb-3">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-blue-600" />
+                      Lodge an Official Service Complaint or Inquiry
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Select the operator and category of issue. Inquiries and complaints are received and resolved by station managers.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Operator */}
+                    <div>
+                      <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Select Bus Operator <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={complaintTenantId}
+                        onChange={(e) => setComplaintTenantId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-semibold cursor-pointer focus:outline-none"
+                      >
+                        {allTenants.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Booking Reference / PNR */}
+                    <div>
+                      <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Booking PNR / Ticket Number <span className="text-slate-400 font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. BM-GL-1001 or BM-D0H05I"
+                        value={complaintBookingRef}
+                        onChange={(e) => setComplaintBookingRef(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono uppercase focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Passenger Name */}
+                    <div>
+                      <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Your Full Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Asif Mahmud"
+                        value={complaintPassengerName}
+                        onChange={(e) => setComplaintPassengerName(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Passenger Contact Phone */}
+                    <div>
+                      <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Contact Mobile Phone <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="e.g. 01711-234567"
+                        value={complaintPassengerPhone}
+                        onChange={(e) => setComplaintPassengerPhone(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Complaint Category Pills */}
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                      Select Issue Category <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {COMPLAINT_CATEGORIES.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setComplaintCategory(cat.id)}
+                          className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                            complaintCategory === cat.id
+                              ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/50 shadow-xs'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-slate-50/50 dark:bg-slate-900/40'
+                          }`}
+                        >
+                          <div className="font-bold text-slate-900 dark:text-white text-xs">{cat.label}</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">{cat.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Priority Selector */}
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                      Urgency Level
+                    </label>
+                    <div className="flex gap-2">
+                      {[
+                        { id: 'normal', label: 'Normal Inquiry', color: 'border-slate-300 text-slate-700' },
+                        { id: 'high', label: 'High Priority', color: 'border-amber-400 text-amber-700' },
+                        { id: 'urgent', label: '🚨 Urgent Departure Issue', color: 'border-rose-400 text-rose-700' },
+                      ].map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setComplaintPriority(p.id as any)}
+                          className={`px-3 py-1.5 rounded-xl border font-bold text-xs transition cursor-pointer ${
+                            complaintPriority === p.id
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Subject */}
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Subject / Short Summary <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. AC cooling was not working on Coach #505 during Dhaka to Chattogram trip"
+                      value={complaintSubject}
+                      onChange={(e) => setComplaintSubject(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Message */}
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Detailed Description of Complaint / Issue <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      placeholder="Please describe what happened, time of incident, seat number, and any assistance required from the station manager..."
+                      value={complaintMessage}
+                      onChange={(e) => setComplaintMessage(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl cursor-pointer text-xs flex items-center gap-2 shadow-lg shadow-blue-600/30"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Submit Official Complaint to Counter Manager</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* SUB-TAB 2: TRACK LIVE COMPLAINTS & INTERACTIVE CHAT */}
+          {supportSubTab === 'track_complaints' && (
+            <div className="space-y-4">
+              {/* Search bar */}
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row gap-3 items-center">
+                <div className="relative flex-1 w-full">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Search by Ticket ID (e.g. st-01), PNR (e.g. BM-GL-1003), or subject..."
+                    value={searchComplaintQuery}
+                    onChange={(e) => setSearchComplaintQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:outline-none"
+                  />
+                </div>
+                {searchComplaintQuery && (
+                  <button
+                    onClick={() => setSearchComplaintQuery('')}
+                    className="text-xs text-blue-600 font-semibold cursor-pointer shrink-0"
+                  >
+                    Clear Filter
+                  </button>
+                )}
+              </div>
+
+              {/* Tickets List */}
+              <div className="space-y-3">
+                {(() => {
+                  const query = searchComplaintQuery.trim().toLowerCase();
+                  const filtered = supportTickets.filter((t) => {
+                    if (!query) return true;
+                    return (
+                      t.id.toLowerCase().includes(query) ||
+                      (t.booking_ref && t.booking_ref.toLowerCase().includes(query)) ||
+                      t.subject.toLowerCase().includes(query) ||
+                      t.message.toLowerCase().includes(query)
+                    );
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center space-y-2">
+                        <MessageSquare className="w-10 h-10 text-slate-400 mx-auto" />
+                        <h4 className="font-bold text-slate-800 dark:text-slate-200">No support tickets found</h4>
+                        <p className="text-xs text-slate-500">
+                          {searchComplaintQuery
+                            ? `No records matching "${searchComplaintQuery}". Try searching by your Ticket ID or PNR.`
+                            : 'You have not submitted any complaints yet. Click "File Complaint" above to submit a case.'}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((t) => {
+                    const isExpanded = selectedTicketForChat === t.id;
+                    const tenant = allTenants.find((item) => item.id === t.tenant_id);
+
+                    const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
+                      open: { bg: 'bg-amber-100 dark:bg-amber-950', text: 'text-amber-800 dark:text-amber-300', label: 'Open' },
+                      in_progress: { bg: 'bg-blue-100 dark:bg-blue-950', text: 'text-blue-800 dark:text-blue-300', label: 'In Progress' },
+                      waiting_for_customer: { bg: 'bg-purple-100 dark:bg-purple-950', text: 'text-purple-800 dark:text-purple-300', label: 'Waiting for Passenger' },
+                      resolved: { bg: 'bg-emerald-100 dark:bg-emerald-950', text: 'text-emerald-800 dark:text-emerald-300', label: 'Resolved' },
+                      closed: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-600 dark:text-slate-400', label: 'Closed' },
+                    };
+
+                    const style = statusStyles[t.status] || statusStyles.open;
+
+                    return (
+                      <div
+                        key={t.id}
+                        className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden transition"
+                      >
+                        {/* Ticket Header Card */}
+                        <div
+                          onClick={() => setSelectedTicketForChat(isExpanded ? null : t.id)}
+                          className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-xs px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-900">
+                                #{t.id.toUpperCase()}
+                              </span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200">
+                                {tenant?.name || 'Coach Operator'}
+                              </span>
+                              {t.booking_ref && (
+                                <span className="font-mono text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                  PNR: {t.booking_ref}
+                                </span>
+                              )}
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${style.bg} ${style.text}`}>
+                                {style.label}
+                              </span>
+                              {t.priority === 'urgent' && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
+                                  🚨 Urgent
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white pt-0.5">
+                              {t.subject}
+                            </h4>
+                            <p className="text-xs text-slate-500 line-clamp-1">
+                              {t.message}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {t.replies?.length || 0} {(t.replies?.length || 0) === 1 ? 'Reply' : 'Replies'}
+                            </span>
+                            <div className="p-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expandable Conversation Thread */}
+                        {isExpanded && (
+                          <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40 space-y-4">
+                            <div className="space-y-3">
+                              {/* Initial Ticket Creation Message */}
+                              <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/30 space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5 text-blue-600" />
+                                    Initial Passenger Complaint
+                                  </span>
+                                  <span className="text-slate-400 font-mono text-[10px]">
+                                    {t.created_at ? new Date(t.created_at).toLocaleString() : ''}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                  {t.message}
+                                </p>
+                              </div>
+
+                              {/* All Replies Thread */}
+                              {t.replies && t.replies.length > 0 && (
+                                <div className="space-y-2.5 pl-2 sm:pl-4 border-l-2 border-emerald-500">
+                                  {t.replies.map((rep) => {
+                                    const isPassenger = rep.sender_role === 'PASSENGER';
+                                    return (
+                                      <div
+                                        key={rep.id}
+                                        className={`p-3 rounded-xl border space-y-1 ${
+                                          isPassenger
+                                            ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900'
+                                            : 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <div className="flex items-center gap-1.5 font-bold">
+                                            {isPassenger ? (
+                                              <User className="w-3.5 h-3.5 text-blue-600" />
+                                            ) : (
+                                              <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                            )}
+                                            <span className={isPassenger ? 'text-blue-900 dark:text-blue-200' : 'text-emerald-900 dark:text-emerald-200'}>
+                                              {rep.sender_name}
+                                            </span>
+                                            <span
+                                              className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                                                isPassenger
+                                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                                              }`}
+                                            >
+                                              {rep.sender_role}
+                                            </span>
+                                          </div>
+                                          <span className="text-slate-400 font-mono text-[10px]">
+                                            {new Date(rep.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                          {rep.message}
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Interactive Passenger Follow-Up Reply Box */}
+                            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                              <label className="font-bold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1.5">
+                                <Send className="w-3 h-3 text-blue-600" />
+                                Send Follow-up Message to Station Counter Manager:
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Type your reply to the counter manager here..."
+                                  value={passengerReplyText}
+                                  onChange={(e) => setPassengerReplyText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSendPassengerReply(t.id);
+                                    }
+                                  }}
+                                  className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendPassengerReply(t.id)}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                  <span>Send Reply</span>
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block">
+                                💬 Replies sent here are instantly visible to the operator's Counter Manager and Customer Support Desk.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* SUB-TAB 3: OPERATOR SUPPORT GROUPS & HELPLINES */}
+          {supportSubTab === 'hotlines_group' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {OPERATOR_SUPPORT_DIRECTORY.map((op) => (
+                  <div
+                    key={op.name}
+                    className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3.5 hover:border-emerald-400 transition"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center font-bold text-emerald-700 dark:text-emerald-300 text-sm">
+                          {op.name.charAt(0)}
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">{op.name}</h4>
+                          <span className="text-[10px] text-emerald-600 font-semibold">{op.status}</span>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-mono">
+                        Official Operator
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500">
+                      {op.coverage}
+                    </p>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                        <span className="text-slate-500 flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-blue-500" />
+                          Shortcode Helpline:
+                        </span>
+                        <a
+                          href={`tel:${op.hotline}`}
+                          className="font-mono font-bold text-blue-600 hover:underline"
+                        >
+                          {op.hotline}
+                        </a>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                        <span className="text-slate-500 flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                          Station Desk Direct:
+                        </span>
+                        <a
+                          href={`tel:${op.phone.replace(/[^0-9+]/g, '')}`}
+                          className="font-mono font-bold text-slate-800 dark:text-slate-200 hover:underline"
+                        >
+                          {op.phone}
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* WhatsApp Support Group Link Button */}
+                    <div className="pt-1">
+                      <a
+                        href={op.whatsappGroupLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-600/30 transition text-xs"
+                      >
+                        <MessageCircle className="w-4 h-4 text-emerald-100" />
+                        <span>Join {op.name} WhatsApp Support Group</span>
+                        <ExternalLink className="w-3.5 h-3.5 text-emerald-200" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Central Consumer Protection & Emergency Hotlines */}
+              <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-emerald-400" />
+                  <h4 className="font-bold text-sm">Bangladesh National Passenger Rights &amp; Emergency Desks</h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 bg-slate-800 rounded-xl border border-slate-700 space-y-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-mono">BRTA Passenger Hotline</span>
+                    <div className="font-extrabold text-base text-cyan-300 font-mono">16107</div>
+                    <p className="text-[10px] text-slate-300">Overcharging, safety violations &amp; route licensing</p>
+                  </div>
+                  <div className="p-3 bg-slate-800 rounded-xl border border-slate-700 space-y-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-mono">National Emergency</span>
+                    <div className="font-extrabold text-base text-rose-400 font-mono">999</div>
+                    <p className="text-[10px] text-slate-300">Highway police, accident response &amp; fire service</p>
+                  </div>
+                  <div className="p-3 bg-slate-800 rounded-xl border border-slate-700 space-y-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-mono">Consumer Rights (DNCRP)</span>
+                    <div className="font-extrabold text-base text-amber-300 font-mono">16121</div>
+                    <p className="text-[10px] text-slate-300">Fare disputes, service quality &amp; ticket complaints</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2057,6 +2906,30 @@ export const CustomerBookingPortal: React.FC = () => {
           </div>,
           document.body
         )}
+
+      {/* FLOATING 24/7 PASSENGER SUPPORT & COMPLAINT PILL */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button
+          type="button"
+          onClick={() => {
+            setViewStep('support_complaint');
+            setSubmittedTicketSuccess(null);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className="group flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-full shadow-2xl shadow-emerald-600/40 border border-emerald-400/40 transition-all duration-200 hover:scale-105 cursor-pointer"
+          title="Open Passenger Support Desk, WhatsApp Group & Complaints"
+        >
+          <div className="relative">
+            <Headphones className="w-5 h-5 text-white" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full" />
+          </div>
+          <div className="text-left">
+            <div className="font-extrabold text-xs leading-tight">24/7 Support &amp; Helpdesk</div>
+            <div className="text-[10px] text-emerald-100 opacity-90 leading-tight">Complain • WhatsApp Group</div>
+          </div>
+        </button>
+      </div>
     </div>
   );
 };
