@@ -129,7 +129,7 @@ export const SupervisorPortal: React.FC = () => {
                 Quick Test Tickets (Click to verify instantly):
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {['TKT-GL-89101', 'TKT-GL-89102', 'TKT-GL-89103-1', 'TKT-INVALID-99'].map((demoCode) => (
+                {['BM-GL-1003', 'BM-GL-1001', 'TKT-GL-89101', 'TKT-GL-89102', 'TKT-GL-89103-1', 'TKT-INVALID-99'].map((demoCode) => (
                   <button
                     key={demoCode}
                     onClick={() => {
@@ -182,8 +182,11 @@ export const SupervisorPortal: React.FC = () => {
                 <div className="bg-white/80 dark:bg-slate-900/80 p-4 rounded-xl space-y-2 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
                   <div className="flex justify-between font-bold text-sm">
                     <span>Passenger: {scanResult.ticket.passenger_name}</span>
-                    <span className="font-mono text-blue-600">
-                      Seat: {scanResult.ticket.seat_number}
+                    <span className="font-mono text-blue-600 font-bold">
+                      Seat(s):{' '}
+                      {scanResult.booking.seats && scanResult.booking.seats.length > 0
+                        ? scanResult.booking.seats.map((s) => s.seat_number).join(', ')
+                        : scanResult.ticket.seat_number}
                     </span>
                   </div>
                   <div className="flex justify-between">

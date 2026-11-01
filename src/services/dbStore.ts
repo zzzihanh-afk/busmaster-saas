@@ -1877,7 +1877,7 @@ class SaaSDataStore {
     return undefined;
   }
 
-  // Boarding verification (for QR Scanner)
+  // Boarding verification (for QR Scanner, Ticket Number, or PNR Booking Ref)
   public verifyBoardingTicket(
     qrHashOrTicketNum: string,
     verifierUserId: string
@@ -1889,17 +1889,48 @@ class SaaSDataStore {
     trip?: Trip;
     message: string;
   } {
+    const rawCode = (qrHashOrTicketNum || '').trim();
+    if (!rawCode) {
+      return { success: false, message: 'Please enter a ticket number, QR code, or PNR reference.' };
+    }
+    const cleanQuery = rawCode.toUpperCase();
+    const numericQuery = rawCode.replace(/\D/g, '');
+
     let targetBooking: Booking | undefined;
     let targetTicket: Ticket | undefined;
 
+    // 1. Search by booking reference (PNR, e.g. BM-GL-1003 or BM-...) or ID or Phone
     for (const b of this.bookings) {
-      if (b.tickets) {
-        const t = b.tickets.find(
-          (t) =>
-            t.ticket_number === qrHashOrTicketNum ||
-            t.qr_code_hash === qrHashOrTicketNum ||
-            qrHashOrTicketNum.includes(t.ticket_number)
-        );
+      const bRef = (b.booking_ref || '').toUpperCase();
+      const bId = (b.id || '').toUpperCase();
+      const bPhone = (b.passenger_phone || '').replace(/\D/g, '');
+
+      if (
+        bRef === cleanQuery ||
+        cleanQuery.includes(bRef) ||
+        bId === cleanQuery ||
+        (numericQuery.length >= 10 && bPhone.endsWith(numericQuery))
+      ) {
+        targetBooking = b;
+        break;
+      }
+    }
+
+    // 2. Search by ticket number or QR code hash in tickets arrays
+    for (const b of this.bookings) {
+      if (b.tickets && b.tickets.length > 0) {
+        const t = b.tickets.find((item) => {
+          const tNum = (item.ticket_number || '').toUpperCase();
+          const tHash = (item.qr_code_hash || '').toUpperCase();
+          const tId = (item.id || '').toUpperCase();
+          return (
+            tNum === cleanQuery ||
+            tHash === cleanQuery ||
+            tId === cleanQuery ||
+            cleanQuery.includes(tNum) ||
+            cleanQuery.includes(tHash)
+          );
+        });
         if (t) {
           targetBooking = b;
           targetTicket = t;
@@ -1908,27 +1939,76 @@ class SaaSDataStore {
       }
     }
 
-    if (!targetTicket || !targetBooking) {
-      return { success: false, message: 'Invalid or unrecognized ticket.' };
+    if (!targetBooking) {
+      return { success: false, message: `Invalid or unrecognized ticket / PNR "${rawCode}".` };
+    }
+
+    // If targetBooking matched by PNR and targetTicket not yet assigned:
+    if (!targetTicket) {
+      if (targetBooking.tickets && targetBooking.tickets.length > 0) {
+        targetTicket = targetBooking.tickets[0];
+      } else {
+        const primarySeat = targetBooking.seats?.[0]?.seat_number || 'A1';
+        targetTicket = {
+          id: `tkt-${targetBooking.id}-1`,
+          tenant_id: targetBooking.tenant_id,
+          ticket_number: `TKT-${targetBooking.booking_ref}`,
+          booking_id: targetBooking.id,
+          trip_id: targetBooking.trip_id,
+          seat_number: primarySeat,
+          passenger_name: targetBooking.passenger_name,
+          qr_code_hash: `QR:${targetBooking.booking_ref}:${primarySeat}`,
+          is_boarded: false,
+          reprint_count: 0,
+          created_at: targetBooking.created_at || new Date().toISOString(),
+        };
+        targetBooking.tickets = [targetTicket];
+      }
+    }
+
+    const trip = this.getTripById(targetBooking.trip_id);
+
+    // 3. Status checks
+    if (targetBooking.ticket_status === 'cancelled') {
+      return {
+        success: false,
+        booking: targetBooking,
+        ticket: targetTicket,
+        trip: trip,
+        message: 'REJECTED: This ticket was cancelled and refunded. Boarding prohibited.',
+      };
+    }
+
+    if (targetBooking.ticket_status === 'cancellation_requested') {
+      return {
+        success: false,
+        booking: targetBooking,
+        ticket: targetTicket,
+        trip: trip,
+        message: 'HOLD: Cancellation requested by passenger. Counter manager approval is pending.',
+      };
     }
 
     if (targetTicket.is_boarded) {
+      const boardedTime = targetTicket.boarded_at
+        ? new Date(targetTicket.boarded_at).toLocaleTimeString()
+        : 'earlier';
       return {
         success: false,
         alreadyBoarded: true,
         ticket: targetTicket,
         booking: targetBooking,
-        message: `ALREADY BOARDED on ${new Date(targetTicket.boarded_at || '').toLocaleTimeString()}! Duplicate boarding rejected.`,
+        trip: trip,
+        message: `ALREADY BOARDED at ${boardedTime}! Duplicate boarding attempt rejected.`,
       };
     }
 
-    // Mark boarded
+    // 4. Mark ticket as boarded
     targetTicket.is_boarded = true;
     targetTicket.boarded_at = new Date().toISOString();
     targetTicket.boarded_by_user_id = verifierUserId;
     saveToStorage('bookings', this.bookings);
-
-    const trip = this.getTripById(targetBooking.trip_id);
+    persistEntity('bookings', targetBooking);
 
     this.addAuditLog({
       tenant_id: targetBooking.tenant_id,
