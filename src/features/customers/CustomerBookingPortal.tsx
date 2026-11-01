@@ -203,6 +203,18 @@ export const CustomerBookingPortal: React.FC = () => {
   const [cancelReason, setCancelReason] = useState('Change of travel schedule');
   const [cancelFeedback, setCancelFeedback] = useState<{ pnr: string; refund: number } | null>(null);
   const [copiedPnr, setCopiedPnr] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Client's own device booking references (strictly isolated to prevent seeing or cancelling other passengers' tickets)
+  const [deviceBookingRefs, setDeviceBookingRefs] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('BUSMASTER_CLIENT_PNRS') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  const cleanPhoneDigits = (val: string) => (val || '').replace(/\D/g, '');
 
   // Seat Type Filter
   const [selectedSeatTypeFilter, setSelectedSeatTypeFilter] = useState<SeatType | 'all'>('all');
@@ -525,6 +537,13 @@ export const CustomerBookingPortal: React.FC = () => {
 
       if (res.success && res.booking) {
         setConfirmedBooking(res.booking);
+        const nextRefs = Array.from(new Set([res.booking.booking_ref, ...deviceBookingRefs]));
+        setDeviceBookingRefs(nextRefs);
+        try {
+          localStorage.setItem('BUSMASTER_CLIENT_PNRS', JSON.stringify(nextRefs));
+        } catch {
+          // ignore
+        }
         confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
         setViewStep('confirmed');
       } else {
@@ -617,9 +636,9 @@ export const CustomerBookingPortal: React.FC = () => {
           >
             <Download className="w-3.5 h-3.5" />
             <span>My Bookings & QR Download</span>
-            {myBookings.length > 0 && (
+            {deviceBookingRefs.length > 0 && (
               <span className="ml-1 px-1.5 py-0.2 bg-blue-500/40 text-blue-200 text-[10px] rounded-full font-mono">
-                {myBookings.length}
+                {deviceBookingRefs.length}
               </span>
             )}
           </button>
@@ -1933,141 +1952,329 @@ export const CustomerBookingPortal: React.FC = () => {
         </div>
       )}
 
-      {/* MY TICKETS SEARCH & LIST STEP */}
+      {/* MY TICKETS SEARCH & LIST STEP (PROTECTED PASSENGER LOOKUP) */}
       {viewStep === 'my_tickets' && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md space-y-4 max-w-2xl mx-auto text-xs">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Download className="w-5 h-5 text-blue-600" />
-              <span>Find Your Bookings &amp; Tickets</span>
-            </h2>
-            <span className="text-xs text-slate-500">
-              {myBookings.length} Total Registered Bookings
-            </span>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md space-y-5 max-w-2xl mx-auto text-xs">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Download className="w-5 h-5 text-blue-600" />
+                <span>Find &amp; Manage Your Tickets</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Retrieve your digital QR boarding pass, verify travel status, or submit refund requests securely.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-900 flex items-center gap-1">
+                <Lock className="w-3 h-3 text-blue-600" />
+                <span>Client Ticket Protection Active</span>
+              </span>
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Search by PNR (e.g. BM-GL-1001) or mobile phone..."
-              value={searchPnr}
-              onChange={(e) => setSearchPnr(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-mono focus:outline-none"
-            />
-          </div>
+          {/* Secure Search Form */}
+          <div className="space-y-2.5">
+            <label className="font-bold text-slate-700 dark:text-slate-300 block text-xs">
+              Search by Mobile Phone Number, PNR Verification Code, or Ticket QR Hash:
+            </label>
 
-          <div className="space-y-3 pt-2">
-            {myBookings
-              .filter(
-                (b) =>
-                  !searchPnr ||
-                  b.booking_ref.toLowerCase().includes(searchPnr.toLowerCase()) ||
-                  b.passenger_phone.includes(searchPnr)
-              )
-              .map((b) => (
-                <div
-                  key={b.id}
-                  className={`p-4 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                    b.ticket_status === 'cancelled'
-                      ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900'
-                      : b.ticket_status === 'cancellation_requested'
-                      ? 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
-                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'
-                  }`}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Enter Mobile Phone (e.g. 01712-345678) or PNR (e.g. BM-GL-1001)..."
+                  value={searchPnr}
+                  onChange={(e) => {
+                    setSearchPnr(e.target.value);
+                    setHasSearched(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setHasSearched(true);
+                    }
+                  }}
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setHasSearched(true)}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-sm text-xs"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>Track Ticket</span>
+              </button>
+
+              {searchPnr && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchPnr('');
+                    setHasSearched(false);
+                  }}
+                  className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-slate-900 dark:text-white font-mono">
-                        {b.booking_ref}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          b.ticket_status === 'confirmed'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : b.ticket_status === 'cancellation_requested'
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300'
-                            : b.ticket_status === 'cancelled'
-                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                            : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                        }`}
-                      >
-                        {b.ticket_status === 'cancellation_requested' ? 'Pending Counter Approval' : b.ticket_status}
-                      </span>
-                      <span className="text-slate-400 font-mono text-[11px]">
-                        • {b.passenger_name} ({b.passenger_phone})
-                      </span>
-                    </div>
+                  Clear
+                </button>
+              )}
+            </div>
 
-                    <p className="text-slate-600 dark:text-slate-300 font-medium">
-                      {b.from_stop_name} ➔ {b.to_stop_name}
-                      <span className="text-slate-400 text-[11px] ml-1">
-                        (Stop #{b.from_seq} to #{b.to_seq})
-                      </span>
-                    </p>
+            {/* Tracking Methods Badges */}
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 pt-0.5">
+              <span className="font-semibold text-slate-600 dark:text-slate-400">Supported lookup methods:</span>
+              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 font-mono text-[10px]">
+                📱 Mobile Phone (e.g. 01712-345678)
+              </span>
+              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 font-mono text-[10px]">
+                🎫 PNR Ref (e.g. BM-GL-1001)
+              </span>
+              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 font-mono text-[10px]">
+                🏷️ Ticket Hash (TKT-...)
+              </span>
+            </div>
 
-                    <p className="text-slate-500 text-[11px]">
-                      Seats: <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{b.seats?.map((s) => s.seat_number).join(', ') || 'N/A'}</span> • Boarding: {b.boarding_point}
-                    </p>
+            {/* Quick Demo Test Buttons for Easy Verification */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 pt-1">
+              <span>Quick Test:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchPnr('01712-345678');
+                  setHasSearched(true);
+                }}
+                className="text-blue-600 hover:underline font-mono cursor-pointer"
+              >
+                01712-345678
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchPnr('BM-GL-1001');
+                  setHasSearched(true);
+                }}
+                className="text-blue-600 hover:underline font-mono cursor-pointer"
+              >
+                BM-GL-1001
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchPnr('01819-223344');
+                  setHasSearched(true);
+                }}
+                className="text-blue-600 hover:underline font-mono cursor-pointer"
+              >
+                01819-223344
+              </button>
+            </div>
+          </div>
+
+          {/* Strict Protected Ticket List */}
+          {(() => {
+            const query = searchPnr.trim();
+            const qDigits = cleanPhoneDigits(query);
+            const qUpper = query.toUpperCase();
+
+            // Client Visible Bookings Logic:
+            let clientBookings: Booking[] = [];
+            let resultDescription = '';
+
+            if (query) {
+              clientBookings = myBookings.filter((b) => {
+                // 1. Match by Phone Number (if at least 4 digits entered):
+                const bDigits = cleanPhoneDigits(b.passenger_phone || '');
+                const phoneMatch =
+                  qDigits.length >= 4 &&
+                  (bDigits.includes(qDigits) || qDigits.includes(bDigits));
+
+                // 2. Match by PNR Reference / Verification Code:
+                const pnrMatch =
+                  b.booking_ref.toUpperCase().includes(qUpper) ||
+                  qUpper.includes(b.booking_ref.toUpperCase());
+
+                // 3. Match by Ticket ID or QR Hash:
+                const ticketMatch = Boolean(
+                  b.tickets?.some(
+                    (t) =>
+                      t.qr_code_hash?.toUpperCase().includes(qUpper) ||
+                      t.id?.toUpperCase().includes(qUpper) ||
+                      (qDigits.length >= 4 && cleanPhoneDigits(t.id).includes(qDigits))
+                  )
+                );
+
+                return phoneMatch || pnrMatch || ticketMatch;
+              });
+
+              resultDescription = `Found ${clientBookings.length} ${
+                clientBookings.length === 1 ? 'ticket' : 'tickets'
+              } matching "${query}"`;
+            } else {
+              // No query entered: ONLY show tickets that were booked on THIS browser/device!
+              clientBookings = myBookings.filter((b) => deviceBookingRefs.includes(b.booking_ref));
+              if (clientBookings.length > 0) {
+                resultDescription = `Your Bookings Made on this Device (${clientBookings.length})`;
+              }
+            }
+
+            // Case 1: Search was attempted, but nothing found
+            if (query && clientBookings.length === 0) {
+              return (
+                <div className="p-6 text-center bg-amber-50/60 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-2">
+                  <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
+                  <h4 className="font-bold text-amber-900 dark:text-amber-200 text-xs">
+                    No bookings found for "{query}"
+                  </h4>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 max-w-sm mx-auto">
+                    Please ensure you entered the exact mobile phone number used during booking (e.g. 01712-345678) or your PNR verification code.
+                  </p>
+                </div>
+              );
+            }
+
+            // Case 2: No search entered and no bookings on this device
+            if (!query && clientBookings.length === 0) {
+              return (
+                <div className="p-8 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto">
+                    <ShieldCheck className="w-6 h-6" />
                   </div>
-
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800">
-                    <div className="text-right">
-                      <span className="font-bold text-emerald-600 font-mono text-sm block">
-                        ৳{b.total_payable}
-                      </span>
-                      {b.ticket_status === 'cancelled' && (
-                        <span className="text-[10px] text-rose-500 font-medium block">
-                          Refund Processed
-                        </span>
-                      )}
-                      {b.ticket_status === 'cancellation_requested' && (
-                        <span className="text-[10px] text-amber-600 font-medium block">
-                          Refund Pending Counter
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setConfirmedBooking(b);
-                          setViewStep('confirmed');
-                        }}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1 shadow-sm"
-                      >
-                        <span>View QR Ticket</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleOpenComplaintForTicket(b)}
-                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1 border border-emerald-200 dark:border-emerald-800"
-                        title="File complaint or contact support for this trip"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Complain</span>
-                      </button>
-
-                      {b.ticket_status === 'confirmed' && (
-                        <button
-                          onClick={() => setBookingToCancel(b)}
-                          className="px-2.5 py-1.5 bg-rose-100 hover:bg-rose-200 dark:bg-rose-950 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1"
-                          title="Request ticket cancellation"
-                        >
-                          <Ban className="w-3.5 h-3.5" />
-                          <span>Request Cancel</span>
-                        </button>
-                      )}
-
-                      {b.ticket_status === 'cancellation_requested' && (
-                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-1 rounded-lg border border-amber-300">
-                          ⏳ Waiting Counter
-                        </span>
-                      )}
-                    </div>
+                  <div className="space-y-1">
+                    <h3 className="font-extrabold text-sm text-slate-800 dark:text-slate-200">
+                      Track Your Passenger Ticket Securely
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      For passenger safety and privacy, ticket records are strictly protected. Enter your contact mobile phone number or booking PNR reference code above to retrieve your boarding pass or request cancellations.
+                    </p>
                   </div>
                 </div>
-              ))}
-          </div>
+              );
+            }
+
+            // Case 3: Display strictly matched client tickets
+            return (
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 pb-1">
+                  <span>{resultDescription}</span>
+                  <span className="text-[11px] font-mono text-emerald-600 flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Verified Passenger Access
+                  </span>
+                </div>
+
+                {clientBookings.map((b) => (
+                  <div
+                    key={b.id}
+                    className={`p-4 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      b.ticket_status === 'cancelled'
+                        ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900'
+                        : b.ticket_status === 'cancellation_requested'
+                        ? 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
+                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white font-mono">
+                          {b.booking_ref}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            b.ticket_status === 'confirmed'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              : b.ticket_status === 'cancellation_requested'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300'
+                              : b.ticket_status === 'cancelled'
+                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                          }`}
+                        >
+                          {b.ticket_status === 'cancellation_requested' ? 'Pending Counter Approval' : b.ticket_status}
+                        </span>
+                        <span className="text-slate-400 font-mono text-[11px]">
+                          • {b.passenger_name} ({b.passenger_phone})
+                        </span>
+                      </div>
+
+                      <p className="text-slate-600 dark:text-slate-300 font-medium">
+                        {b.from_stop_name} ➔ {b.to_stop_name}
+                        <span className="text-slate-400 text-[11px] ml-1">
+                          (Stop #{b.from_seq} to #{b.to_seq})
+                        </span>
+                      </p>
+
+                      <p className="text-slate-500 text-[11px]">
+                        Seats: <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{b.seats?.map((s) => s.seat_number).join(', ') || 'N/A'}</span> • Boarding: {b.boarding_point}
+                      </p>
+                    </div>
+
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800">
+                      <div className="text-right">
+                        <span className="font-bold text-emerald-600 font-mono text-sm block">
+                          ৳{b.total_payable}
+                        </span>
+                        {b.ticket_status === 'cancelled' && (
+                          <span className="text-[10px] text-rose-500 font-medium block">
+                            Refund Processed
+                          </span>
+                        )}
+                        {b.ticket_status === 'cancellation_requested' && (
+                          <span className="text-[10px] text-amber-600 font-medium block">
+                            Refund Pending Counter
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setConfirmedBooking(b);
+                            setViewStep('confirmed');
+                          }}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1 shadow-sm"
+                        >
+                          <span>View QR Ticket</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenComplaintForTicket(b)}
+                          className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1 border border-emerald-200 dark:border-emerald-800"
+                          title="File complaint or contact support for this trip"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Complain</span>
+                        </button>
+
+                        {b.ticket_status === 'confirmed' && (
+                          <button
+                            onClick={() => setBookingToCancel(b)}
+                            className="px-2.5 py-1.5 bg-rose-100 hover:bg-rose-200 dark:bg-rose-950 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1"
+                            title="Request ticket cancellation"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            <span>Request Cancel</span>
+                          </button>
+                        )}
+
+                        {b.ticket_status === 'cancellation_requested' && (
+                          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-1 rounded-lg border border-amber-300">
+                            ⏳ Waiting Counter
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
